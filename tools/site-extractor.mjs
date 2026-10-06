@@ -85,10 +85,17 @@ async function submitPublicSearch() {
 
   // Submit only the explicitly supplied public search value. This does not
   // enumerate identifiers or bypass authentication.
+  const navigation = page.waitForNavigation({
+    waitUntil:"domcontentloaded",
+    timeout:10000
+  }).catch(() => null);
+
   await page.evaluate(() => {
     const form = document.querySelector("form");
     if (form) form.requestSubmit();
   });
+
+  await navigation;
   await page.waitForTimeout(1800);
 
   const html = await page.content();
