@@ -138,12 +138,33 @@ async function submitPublicSearch() {
           [...tr.querySelectorAll("th,td")].map(td => clean(td.innerText))
         )
       }));
+
+      const fields = {};
+      for (const row of document.querySelectorAll("table tr")) {
+        const cells = [...row.querySelectorAll("th,td")].map(td => clean(td.innerText));
+        if (cells.length >= 2 && cells[0]) fields[cells[0].replace(/:$/, "")] = cells.slice(1).join(" ").trim();
+      }
+
+      const links = [...document.querySelectorAll("a[href]")].map(a => ({
+        text:clean(a.innerText),
+        href:a.href
+      }));
+
+      const mapLink = links.find(x => /google\\.com\\/maps/i.test(x.href))?.href || "";
+      const whatsappLink = links.find(x => /whatsapp:/i.test(x.href))?.href || "";
+      const coordMatch = mapLink.match(/[?&]query=(-?\\d+(?:\\.\\d+)?),(-?\\d+(?:\\.\\d+)?)/i);
+
       return {
         title:document.title,
         htmlBytes:document.documentElement.outerHTML.length,
         tables,
-        text:(document.body?.innerText || "").slice(0,500000),
-        url:location.href
+        fields,
+        links,
+        mapLink,
+        whatsappLink,
+        latitude:coordMatch ? Number(coordMatch[1]) : null,
+        longitude:coordMatch ? Number(coordMatch[2]) : null,
+        text:(document.body?.innerText || "").slice(0,500000)
       };
     });
 
@@ -152,6 +173,7 @@ async function submitPublicSearch() {
       status:response.status(),
       searchValue,
       searchResult:true,
+      resultUrl:action,
       ...data
     });
   } finally {
@@ -278,6 +300,31 @@ const result = {
 
 await fs.mkdir("output",{recursive:true});
 await fs.writeFile("output/extraction.json",JSON.stringify(result,null,2));
+
+const searchResults = pages
+  .filter(p => p.searchResult && p.fields)
+  .map(p => ({
+    searchValue: p.searchValue || "",
+    resultUrl: p.resultUrl || p.url || "",
+    minipillarNo: p.fields["Minipillar No."] || p.fields["Minipillar No"] || "",
+    type: p.fields["Type"] || "",
+    manufacture: p.fields["Manfacture"] || p.fields["Manufacture"] || "",
+    location: p.fields["Location"] || "",
+    latitude: p.latitude,
+    longitude: p.longitude,
+    mapLink: p.mapLink || "",
+    whatsappLink: p.whatsappLink || ""
+  }));
+
+await fs.writeFile("output/search-results.json", JSON.stringify(searchResults, null, 2));
+
+const resultHeaders = ["searchValue","resultUrl","minipillarNo","type","manufacture","location","latitude","longitude","mapLink","whatsappLink"];
+await fs.writeFile(
+  "output/search-results.csv",
+  [resultHeaders, ...searchResults.map(r => resultHeaders.map(k => r[k]))]
+    .map(r => r.map(v => '"' + csv(v) + '"').join(","))
+    .join("\n")
+);
 
 const rows = [];
 for (const p of pages) {
