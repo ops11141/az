@@ -66,7 +66,7 @@ page.on("response", response => {
 async function submitPublicSearch() {
   if (!searchValue) return;
 
-  const formInfo = await page.evaluate(() => {
+  const formInfo = await page.evaluate((value) => {
     const form = document.querySelector("form");
     if (!form) return {attempted:false, reason:"No form found"};
 
@@ -89,7 +89,7 @@ async function submitPublicSearch() {
       field:field.name,
       fields
     };
-  });
+  }, searchValue);
 
   if (!formInfo.attempted) return formInfo;
 
