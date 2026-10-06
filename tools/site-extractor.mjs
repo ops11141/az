@@ -301,6 +301,8 @@ const result = {
 await fs.mkdir("output",{recursive:true});
 await fs.writeFile("output/extraction.json",JSON.stringify(result,null,2));
 
+const csv = v => String(v ?? "").replaceAll('"','""');
+
 const searchResults = pages
   .filter(p => p.searchResult && p.fields)
   .map(p => ({
@@ -332,7 +334,6 @@ for (const p of pages) {
     for (const r of t.rows || []) rows.push([p.url,t.index,...r]);
   }
 }
-const csv = v => String(v ?? "").replaceAll('"','""');
 await fs.writeFile(
   "output/tables.csv",
   rows.map(r => r.map(v => '"' + csv(v) + '"').join(",")).join("\n")
