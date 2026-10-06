@@ -14,7 +14,7 @@ permissions:
 jobs:
   extract:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -34,6 +34,10 @@ jobs:
         env:
           TARGET_URL: ${{ inputs.target_url }}
         run: node tools/site-extractor.mjs
+
+      - name: Show extraction summary
+        run: |
+          node -e "const r=require('./output/extraction.json'); console.log(JSON.stringify({target:r.target,pages:r.pages.length,network:r.network.length,forms:r.pages.reduce((n,p)=>n+(p.forms||[]).length,0),tables:r.pages.reduce((n,p)=>n+(p.tables||[]).length,0)},null,2))"
 
       - name: Upload extraction artifacts
         uses: actions/upload-artifact@v4
