@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>أداة استخراج البيانات العامة</title>
+<style>
+:root{--g:#008f6b;--g2:#006b52;--bg:#f3f7f5;--text:#17302a;--muted:#65756f;--line:#dce9e4}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:Tahoma,Arial,sans-serif}
+header{background:linear-gradient(135deg,var(--g2),var(--g));color:#fff;padding:18px}.wrap{max-width:1100px;margin:auto}
+main{padding:20px 12px}.card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:14px;box-shadow:0 8px 25px #00322310}
+h1{margin:0 0 7px;font-size:24px}h2{font-size:18px;margin:0 0 10px}.muted{color:var(--muted);line-height:1.8}
+.row{display:flex;gap:8px;flex-wrap:wrap}.row input{flex:1;min-width:240px;padding:13px;border:1px solid #cbdcd6;border-radius:10px;font-size:15px;direction:ltr}
+button{border:0;border-radius:10px;padding:11px 15px;background:var(--g);color:#fff;font-weight:bold;cursor:pointer}button.alt{background:#edf5f2;color:var(--g2)}
+.status{margin-top:12px;padding:11px;border-radius:10px;background:#f4f8f6}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.stat{border:1px solid var(--line);border-radius:11px;padding:12px}.stat small{display:block;color:var(--muted)}.stat b{font-size:20px}
+pre{white-space:pre-wrap;word-break:break-word;background:#10201c;color:#dff7ee;border-radius:12px;padding:14px;max-height:420px;overflow:auto;direction:ltr;text-align:left}
+table{width:100%;border-collapse:collapse;min-width:700px}th,td{padding:9px;border-bottom:1px solid #e8efec;text-align:right}th{background:#edf5f2;color:var(--g2)}
+.scroll{overflow:auto}.warn{border-right:4px solid #d89b20;background:#fff9e9;padding:12px;border-radius:9px;line-height:1.8}
+.ok{border-right:4px solid var(--g);background:#eef9f5;padding:12px;border-radius:9px;line-height:1.8}
+@media(max-width:700px){.grid{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<header><div class="wrap"><h1>🔎 أداة استخراج البيانات العامة</h1><div>Public Data Extractor — ops11141/az</div></div></header>
+<main class="wrap">
+<section class="card">
+<h2>1) تحليل رابط</h2>
+<p class="muted">أدخل رابطًا عامًا. الأداة تستخرج الجداول وبيانات JSON والنماذج والروابط ونقاط البيانات الظاهرة. لا تتجاوز تسجيل الدخول أو الحماية.</p>
+<div class="row"><input id="url" value="https://hafrmeter.com/mp/" placeholder="https://example.com"><button id="run">تحليل الرابط</button><button id="download" class="alt" disabled>تنزيل JSON</button></div>
+<div id="status" class="status">جاهز.</div>
+</section>
+<section class="card"><div class="grid">
+<div class="stat"><small>الجداول</small><b id="tables">0</b></div><div class="stat"><small>JSON</small><b id="jsons">0</b></div><div class="stat"><small>النماذج</small><b id="forms">0</b></div><div class="stat"><small>الروابط</small><b id="links">0</b></div>
+</div></section>
+<section class="card"><h2>الجداول المستخرجة</h2><div id="tableOut" class="scroll"><div class="muted">لم يبدأ التحليل.</div></div></section>
+<section class="card"><h2>النماذج ونقاط البحث</h2><div id="formOut"><div class="muted">لم يبدأ التحليل.</div></div></section>
+<section class="card"><h2>JSON / بيانات مضمنة</h2><pre id="jsonOut">لم يبدأ التحليل.</pre></section>
+<section class="card"><h2>الروابط ونقاط البيانات المحتملة</h2><pre id="linkOut">لم يبدأ التحليل.</pre></section>
+<section class="card"><div class="warn">إذا منع الموقع CORS، استخدم <b>Actions → Public Site Extractor → Run workflow</b>. هذا يشغّل Chromium داخل GitHub Actions ويجمع الصفحة العامة والطلبات XHR/fetch التي تظهر أثناء تحميلها.</div><div class="ok">النسخة مخصصة للبيانات العامة فقط: لا كلمات مرور، لا تجاوز مصادقة، لا فحص منافذ، ولا تخمين أرقام أو أسرار.</div></section>
+</main>
+<script>
+let lastResult=null;const $=id=>document.getElementById(id);
+function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function parseHTML(text,base){const doc=new DOMParser().parseFromString(text,'text/html');
+const tables=[...doc.querySelectorAll('table')].map((t,i)=>({index:i,rows:[...t.querySelectorAll('tr')].map(tr=>[...tr.querySelectorAll('th,td')].map(td=>td.innerText.trim()))}));
+const forms=[...doc.forms].map(f=>({method:(f.method||'get').toUpperCase(),action:new URL(f.getAttribute('action')||base,base).href,fields:[...f.elements].filter(x=>x.name).map(x=>({name:x.name,type:x.type||'text',value:x.value||'',required:!!x.required}))}));
+const links=[...doc.querySelectorAll('a[href],script[src],link[href]')].map(x=>{const raw=x.getAttribute('href')||x.getAttribute('src');try{return new URL(raw,base).href}catch{return raw}}).filter(Boolean);
+const json=[...doc.querySelectorAll('script[type="application/json"],script[type="application/ld+json"]')].map((s,i)=>({index:i,text:s.textContent.trim()}));
+return{title:doc.title,htmlBytes:text.length,tables,forms,links:[...new Set(links)],jsonScripts:json,candidateEndpoints:[...new Set([...forms.map(f=>f.action),...links.filter(u=>/\.(json|xml|csv)(\?|$)|api|ajax|search|data/i.test(u))])]}}
+function render(r){$('tables').textContent=r.tables.length.toLocaleString('ar-SA');$('jsons').textContent=r.jsonScripts.length.toLocaleString('ar-SA');$('forms').textContent=r.forms.length.toLocaleString('ar-SA');$('links').textContent=r.links.length.toLocaleString('ar-SA');
+$('tableOut').innerHTML=r.tables.length?r.tables.map(t=>'<div class="card"><b>جدول '+(t.index+1)+'</b><div class="scroll"><table><tbody>'+t.rows.map(row=>'<tr>'+row.map(c=>'<td>'+esc(c)+'</td>').join('')+'</tr>').join('')+'</tbody></table></div></div>').join(''):'<div class="muted">لا توجد جداول.</div>';
+$('formOut').innerHTML=r.forms.length?r.forms.map(f=>'<div class="card"><b>'+esc(f.method)+' → '+esc(f.action)+'</b><pre>'+esc(JSON.stringify(f.fields,null,2))+'</pre></div>').join(''):'<div class="muted">لا توجد نماذج.</div>';
+$('jsonOut').textContent=r.jsonScripts.length?r.jsonScripts.map(x=>x.text).join('\\n\\n---\\n\\n'):'لا توجد JSON مضمنة.';$('linkOut').textContent=r.candidateEndpoints.join('\\n')||'لا توجد نقاط بيانات واضحة.'}
+$('run').onclick=async()=>{const u=$('url').value.trim();if(!/^https?:\\/\\//i.test(u)){$('status').textContent='أدخل رابطًا يبدأ بـ http:// أو https://';return}$('status').textContent='جارٍ جلب الصفحة...';try{const res=await fetch(u,{redirect:'follow'});const text=await res.text();if(!res.ok)throw new Error('HTTP '+res.status);lastResult={url:u,status:res.status,contentType:res.headers.get('content-type')||'',...parseHTML(text,res.url||u)};render(lastResult);$('download').disabled=false;$('status').textContent='تم التحليل بنجاح.'}catch(e){$('status').textContent='تعذر الجلب من المتصفح: '+e.message+' — جرّب Workflow من Actions للمواقع التي تمنع CORS.'}};
+$('download').onclick=()=>{if(!lastResult)return;const blob=new Blob([JSON.stringify(lastResult,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='public-extraction.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
+</script>
+</body></html>
