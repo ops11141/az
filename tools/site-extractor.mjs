@@ -66,66 +66,105 @@ page.on("response", response => {
 async function submitPublicSearch() {
   if (!searchValue) return;
 
-  const result = await page.evaluate(async (value) => {
+  const formInfo = await page.evaluate(() => {
     const form = document.querySelector("form");
     if (!form) return {attempted:false, reason:"No form found"};
+
     const field = form.querySelector('input[name="meter"], input[name="search"], input[type="search"], input[type="text"]');
     if (!field) return {attempted:false, reason:"No suitable public search field found"};
 
-    field.value = value;
+    const fields = {};
+    for (const el of [...form.elements]) {
+      if (!el.name || el.disabled) continue;
+      if ((el.type || "").toLowerCase() === "submit") continue;
+      if ((el.type || "").toLowerCase() === "checkbox" && !el.checked) continue;
+      fields[el.name] = el.value || "";
+    }
+    fields[field.name] = value;
+
     return {
       attempted:true,
       method:(form.method || "get").toUpperCase(),
-      action:form.action,
-      field:field.name
-    };
-  }, searchValue);
-
-  if (!result.attempted) return result;
-
-  // Submit only the explicitly supplied public search value. This does not
-  // enumerate identifiers or bypass authentication.
-  const navigation = page.waitForNavigation({
-    waitUntil:"domcontentloaded",
-    timeout:10000
-  }).catch(() => null);
-
-  await page.evaluate(() => {
-    const form = document.querySelector("form");
-    if (form) form.requestSubmit();
-  });
-
-  await navigation;
-  await page.waitForTimeout(1800);
-
-  const html = await page.content();
-  const data = await page.evaluate(() => {
-    const tables = [...document.querySelectorAll("table")].map((t,i)=>({
-      index:i,
-      rows:[...t.querySelectorAll("tr")].map(tr =>
-        [...tr.querySelectorAll("th,td")].map(td => (td.innerText || "").trim())
-      )
-    }));
-    return {
-      title:document.title,
-      htmlBytes:html.length,
-      tables,
-      text:(document.body?.innerText || "").slice(0,500000),
-      url:location.href
+      action:form.action || location.href,
+      field:field.name,
+      fields
     };
   });
 
-  pages.push({
-    url:data.url,
-    status:200,
-    searchValue,
-    searchResult:true,
-    ...data
+  if (!formInfo.attempted) return formInfo;
+
+  const action = new URL(formInfo.action, target).href;
+  let response;
+  let body = "";
+
+  try {
+    if (formInfo.method === "POST") {
+      response = await context.request.post(action, {
+        form: formInfo.fields,
+        timeout: 15000
+      });
+    } else {
+      const q = new URL(action);
+      for (const [key, value] of Object.entries(formInfo.fields)) {
+        q.searchParams.set(key, value);
+      }
+      response = await context.request.get(q.href, {timeout:15000});
+    }
+
+    body = await response.text();
+  } catch (error) {
+    return {attempted:true, error:`Search request failed: ${error}`};
+  }
+
+  network.push({
+    url:action,
+    method:formInfo.method,
+    status:response.status(),
+    resourceType:"document",
+    contentType:response.headers()["content-type"] || "",
+    requestBody:formInfo.fields,
+    body:body.length <= MAX_CAPTURE ? body : undefined
   });
 
-  return {attempted:true, resultUrl:data.url};
+  const resultPage = await context.newPage();
+  try {
+    await resultPage.setContent(body, {waitUntil:"domcontentloaded", timeout:10000});
+
+    const data = await resultPage.evaluate(() => {
+      const clean = s => (s || "").trim();
+      const tables = [...document.querySelectorAll("table")].map((t,i)=>({
+        index:i,
+        rows:[...t.querySelectorAll("tr")].map(tr =>
+          [...tr.querySelectorAll("th,td")].map(td => clean(td.innerText))
+        )
+      }));
+      return {
+        title:document.title,
+        htmlBytes:document.documentElement.outerHTML.length,
+        tables,
+        text:(document.body?.innerText || "").slice(0,500000),
+        url:location.href
+      };
+    });
+
+    pages.push({
+      url:action,
+      status:response.status(),
+      searchValue,
+      searchResult:true,
+      ...data
+    });
+  } finally {
+    await resultPage.close();
+  }
+
+  return {
+    attempted:true,
+    method:formInfo.method,
+    action,
+    status:response.status()
+  };
 }
-
 async function inspect(url) {
   if (seen.has(url) || seen.size >= MAX_PAGES) return;
   seen.add(url);
