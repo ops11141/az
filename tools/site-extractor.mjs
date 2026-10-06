@@ -150,7 +150,7 @@ async function submitPublicSearch() {
         href:a.href
       }));
 
-      const mapLink = links.find(x => /google\\.com\\/maps/i.test(x.href))?.href || "";
+      const mapLink = links.find(x => /google\.com\/maps/i.test(x.href))?.href || "";
       const whatsappLink = links.find(x => /whatsapp:/i.test(x.href))?.href || "";
       const coordMatch = mapLink.match(/[?&]query=(-?\\d+(?:\\.\\d+)?),(-?\\d+(?:\\.\\d+)?)/i);
 
