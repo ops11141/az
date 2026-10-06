@@ -7,6 +7,10 @@ on:
         description: "Public URL to analyze (http/https only)"
         required: true
         type: string
+      search_value:
+        description: "Optional public search value to submit to the site's search form"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -33,6 +37,7 @@ jobs:
       - name: Extract public data
         env:
           TARGET_URL: ${{ inputs.target_url }}
+          SEARCH_VALUE: ${{ inputs.search_value }}
         run: node tools/site-extractor.mjs
 
       - name: Show extraction summary
