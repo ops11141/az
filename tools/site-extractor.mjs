@@ -2,6 +2,7 @@ import { chromium } from "playwright";
 import fs from "node:fs/promises";
 
 const target = process.env.TARGET_URL;
+const searchValue = process.env.SEARCH_VALUE || "";
 if (!target) throw new Error("TARGET_URL is required");
 
 const u = new URL(target);
@@ -61,6 +62,62 @@ async function captureResponse(response) {
 page.on("response", response => {
   captureResponse(response).catch(() => {});
 });
+
+async function submitPublicSearch() {
+  if (!searchValue) return;
+
+  const result = await page.evaluate(async (value) => {
+    const form = document.querySelector("form");
+    if (!form) return {attempted:false, reason:"No form found"};
+    const field = form.querySelector('input[name="meter"], input[name="search"], input[type="search"], input[type="text"]');
+    if (!field) return {attempted:false, reason:"No suitable public search field found"};
+
+    field.value = value;
+    return {
+      attempted:true,
+      method:(form.method || "get").toUpperCase(),
+      action:form.action,
+      field:field.name
+    };
+  }, searchValue);
+
+  if (!result.attempted) return result;
+
+  // Submit only the explicitly supplied public search value. This does not
+  // enumerate identifiers or bypass authentication.
+  await page.evaluate(() => {
+    const form = document.querySelector("form");
+    if (form) form.requestSubmit();
+  });
+  await page.waitForTimeout(1800);
+
+  const html = await page.content();
+  const data = await page.evaluate(() => {
+    const tables = [...document.querySelectorAll("table")].map((t,i)=>({
+      index:i,
+      rows:[...t.querySelectorAll("tr")].map(tr =>
+        [...tr.querySelectorAll("th,td")].map(td => (td.innerText || "").trim())
+      )
+    }));
+    return {
+      title:document.title,
+      htmlBytes:html.length,
+      tables,
+      text:(document.body?.innerText || "").slice(0,500000),
+      url:location.href
+    };
+  });
+
+  pages.push({
+    url:data.url,
+    status:200,
+    searchValue,
+    searchResult:true,
+    ...data
+  });
+
+  return {attempted:true, resultUrl:data.url};
+}
 
 async function inspect(url) {
   if (seen.has(url) || seen.size >= MAX_PAGES) return;
@@ -159,6 +216,7 @@ async function inspect(url) {
 }
 
 await inspect(target);
+await submitPublicSearch();
 
 // Let pending response-body reads finish.
 await page.waitForTimeout(1200);
