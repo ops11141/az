@@ -16,6 +16,7 @@ if (blocked.test(u.hostname) || u.hostname.endsWith(".local")) {
 const MAX_PAGES = 12;
 const MAX_BODY = 3 * 1024 * 1024;
 const MAX_CAPTURE = 700000;
+const SOURCE_PATHS = ["/robots.txt","/sitemap.xml","/sitemap_index.xml","/data.json","/data.csv","/database.json","/meters.json","/meters.csv","/api/data","/api/meters","/mp/data.json","/mp/data.csv"];
 
 const seen = new Set();
 const pages = [];
@@ -283,7 +284,23 @@ async function inspect(url) {
   }
 }
 
+async function inspectPublicSources() {
+  const base = new URL(target);
+  for (const path of SOURCE_PATHS) {
+    const url = new URL(path, base.origin).href;
+    try {
+      const response = await context.request.get(url, {timeout:10000});
+      const type = response.headers()["content-type"] || "";
+      const body = await response.text();
+      if (response.ok() && body && body.length <= MAX_BODY && (/json|csv|xml|text|html/i.test(type) || /robots|sitemap|data|meter|api/i.test(path))) {
+        network.push({url,method:"GET",status:response.status(),resourceType:"document",contentType:type,publicSourceCandidate:true,body:body.length <= MAX_CAPTURE ? body : undefined});
+      }
+    } catch {}
+  }
+}
+
 await inspect(target);
+await inspectPublicSources();
 await submitPublicSearch();
 
 // Let pending response-body reads finish.
